@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameScene } from './components/Scene';
 import { INITIAL_GAME_STATE, WARP_THRESHOLD } from './constants';
 import { GameState, Planet, GameStatus } from './types';
-import { generateNextPlanet, fetchGalacticNews, playCrewAudio, fetchNearbySpaceHubs } from './services/geminiService';
+import { generateNextPlanet, fetchGalacticNews, playCrewAudio, fetchNearbySpaceHubs, generatePerformanceReview } from './services/geminiService';
 
 const HUD = ({ state }: { state: GameState }) => (
   <header className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none z-10 text-white font-mono">
@@ -10,34 +11,20 @@ const HUD = ({ state }: { state: GameState }) => (
       <h1 className="text-4xl font-black italic tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">VOID CADET</h1>
       <div className="mt-2 text-sm opacity-80">
         <p>SECTOR: <span style={{ color: state.currentPlanet.theme.neonColor }}>{state.currentPlanet.name}</span></p>
-        <p>GRAVITY: {state.currentPlanet.physics.gravity} G</p>
-        <div className="flex gap-2 mt-1" aria-label={`Lives remaining: ${state.lives}`}>
+        <div className="flex gap-2 mt-1" aria-label={`Lives: ${state.lives}`}>
            {[...Array(state.lives)].map((_, i) => (
                <div key={i} className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_5px_red]" />
            ))}
         </div>
       </div>
-      <div className="mt-4 flex flex-col gap-2">
-         {state.artifacts.map((art, i) => (
-             <div key={i} className="flex items-center gap-2 bg-black/50 p-1 rounded px-2 border border-gray-700 animate-in slide-in-from-left">
-                 <span aria-hidden="true">{art.icon}</span>
-                 <span className="text-xs text-gray-300 uppercase">{art.name}</span>
-             </div>
-         ))}
-      </div>
     </div>
-    
     <div className="text-right flex flex-col items-end gap-2">
-      <div className="text-6xl font-bold text-blue-100 tabular-nums">{state.score.toLocaleString()}</div>
-      <div className="flex flex-col items-end gap-1">
-         <div className="text-[10px] font-black tracking-widest uppercase">Warp Capacitor</div>
-         <div className="w-48 h-3 bg-gray-800 border border-gray-600 rounded-full overflow-hidden" role="progressbar" aria-valuenow={state.warpCharge} aria-valuemin={0} aria-valuemax={100}>
-            <div 
-              className={`h-full transition-all duration-500 ${state.warpReady ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-blue-500'}`}
-              style={{ width: `${Math.min(state.warpCharge, 100)}%` }}
-            />
-         </div>
-         {state.warpReady && <div className="text-green-400 font-bold animate-pulse text-[10px] mt-1 uppercase tracking-tighter">Gate Synchronization Complete</div>}
+      <div className="text-6xl font-bold tabular-nums">{state.score.toLocaleString()}</div>
+      <div className="w-48 h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div 
+          className={`h-full transition-all duration-500 ${state.warpReady ? 'bg-green-400' : 'bg-blue-500'}`}
+          style={{ width: `${Math.min(state.warpCharge, 100)}%` }}
+        />
       </div>
       <GalacticNewsFeed />
     </div>
@@ -46,49 +33,21 @@ const HUD = ({ state }: { state: GameState }) => (
 
 const GalacticNewsFeed = () => {
   const [news, setNews] = useState<{ text: string; url: string | null; title: string } | null>(null);
-  useEffect(() => {
-    fetchGalacticNews().then(d => d && setNews(d));
-  }, []);
+  useEffect(() => { fetchGalacticNews().then(d => d && setNews(d)); }, []);
   if (!news) return null;
   return (
-    <div className="mt-4 max-w-xs bg-indigo-900/30 border border-indigo-500/30 p-3 rounded-lg text-[10px] text-indigo-200 pointer-events-auto shadow-xl backdrop-blur-md">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-        <span className="font-bold tracking-widest uppercase text-indigo-300">Galactic Broadcast</span>
-      </div>
-      <p className="line-clamp-2 italic opacity-90">{news.text}</p>
-      {news.url && (
-        <a 
-          href={news.url} target="_blank" rel="noopener noreferrer" 
-          className="mt-2 block text-indigo-400 underline truncate hover:text-white transition-colors"
-        >
-          {news.title}
-        </a>
-      )}
+    <div className="mt-4 max-w-xs bg-indigo-900/30 border border-indigo-500/30 p-2 rounded text-[10px] text-indigo-200 pointer-events-auto">
+      <p className="line-clamp-2 italic">{news.text}</p>
     </div>
   );
 };
 
 const CrewMessage = ({ message, audio }: { message: string, audio?: string }) => {
-  useEffect(() => {
-    if (audio) playCrewAudio(audio);
-  }, [audio]);
-
+  useEffect(() => { if (audio) playCrewAudio(audio); }, [audio]);
   return (
     <div className="absolute bottom-8 left-8 max-w-md pointer-events-none z-10" aria-live="polite">
-      <div className="bg-black/90 border-l-4 border-blue-500 p-5 rounded-r-xl backdrop-blur-md shadow-2xl">
-        <div className="flex items-center justify-between mb-2">
-           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-black shadow-[0_0_10px_#2563eb]">AI</div>
-             <span className="text-blue-400 font-black text-xs tracking-widest uppercase">Tactical Relay</span>
-           </div>
-           {audio && (
-             <div className="audio-bars" aria-hidden="true">
-               {[1,2,3,4].map(i => <div key={i} className="audio-bar" style={{animationDelay: `${i*0.1}s`}} />)}
-             </div>
-           )}
-        </div>
-        <p className="text-gray-100 text-sm leading-relaxed tracking-tight">"{message}"</p>
+      <div className="bg-black/90 border-l-4 border-blue-500 p-5 rounded backdrop-blur-md">
+        <p className="text-gray-100 text-sm italic">"{message}"</p>
       </div>
     </div>
   );
@@ -98,65 +57,33 @@ const WarpOverlay = ({ planet, visible }: { planet: Planet, visible: boolean }) 
   if (!visible) return null;
   return (
     <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center animate-in fade-in duration-1000">
-      <div className="absolute inset-0 bg-blue-900/10 animate-pulse"></div>
-      
       <div className="relative z-10 flex flex-col items-center gap-8 max-w-3xl text-center px-6">
-        <h2 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 italic tracking-tighter">WARP JUMP ACTIVE</h2>
+        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600 italic">WARP SEQUENCE</h2>
         
-        {planet.imageUrl && (
-          <div className="w-full aspect-video rounded-2xl border border-indigo-500/50 overflow-hidden shadow-[0_0_80px_rgba(79,70,229,0.4)] transition-transform duration-[3s] hover:scale-105">
-            <img src={planet.imageUrl} alt={`Destination: ${planet.name}`} className="w-full h-full object-cover animate-in zoom-in duration-1000" />
+        {planet.videoUrl ? (
+          <div className="w-full aspect-video rounded-2xl border border-blue-500/50 overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.3)]">
+            <video 
+              src={planet.videoUrl} 
+              autoPlay 
+              muted 
+              loop 
+              playsInline 
+              className="w-full h-full object-cover" 
+            />
+          </div>
+        ) : planet.imageUrl ? (
+          <img src={planet.imageUrl} className="w-full aspect-video rounded-2xl object-cover border border-blue-500/50" alt="Destination" />
+        ) : (
+          <div className="w-full aspect-video flex items-center justify-center bg-gray-900 rounded-2xl animate-pulse">
+            <span className="text-blue-400 font-mono">CALCULATING TRAJECTORY...</span>
           </div>
         )}
 
-        <div className="bg-black/80 p-8 rounded-2xl border border-indigo-500/30 backdrop-blur-2xl shadow-2xl">
-          <h3 className="text-4xl font-black mb-2 tracking-tight" style={{ color: planet.theme.neonColor }}>{planet.name.toUpperCase()}</h3>
-          <p className="text-indigo-100/70 text-sm leading-relaxed mb-6 italic">{planet.description}</p>
-          <div className="grid grid-cols-2 gap-4 text-xs font-mono uppercase tracking-[0.2em] text-indigo-400 border-t border-white/10 pt-4">
-             <div className="text-left">GRAVITY: <span className="text-white font-bold">{planet.physics.gravity} G</span></div>
-             <div className="text-right">FRICTION: <span className="text-white font-bold">{(planet.physics.friction * 100).toFixed(0)}%</span></div>
-          </div>
+        <div className="bg-black/80 p-6 rounded-xl border border-indigo-500/30">
+          <h3 className="text-3xl font-bold" style={{ color: planet.theme.neonColor }}>{planet.name}</h3>
+          <p className="text-gray-400 text-xs mt-2 uppercase tracking-[0.3em]">Distance Syncing: 100%</p>
         </div>
       </div>
-    </div>
-  );
-};
-
-const NearbyHubsList = () => {
-  const [hubs, setHubs] = useState<{title: string, uri: string}[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const getHubs = () => {
-    setLoading(true);
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const data = await fetchNearbySpaceHubs(pos.coords.latitude, pos.coords.longitude);
-      setHubs(data);
-      setLoading(false);
-    }, () => setLoading(false));
-  };
-
-  return (
-    <div className="mt-8 p-4 bg-white/5 border border-white/10 rounded-xl text-left max-w-sm">
-      <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-2">Ground Exploration Units</h3>
-      {hubs.length === 0 ? (
-        <button 
-          onClick={getHubs} 
-          disabled={loading}
-          className="text-xs bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded font-bold transition-all w-full"
-        >
-          {loading ? "SCANNIG TERRA..." : "SYNC LOCAL OBSERVATORIES"}
-        </button>
-      ) : (
-        <ul className="space-y-2">
-          {hubs.map((h, i) => (
-            <li key={i}>
-              <a href={h.uri} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 underline hover:text-white truncate block">
-                {h.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 };
@@ -164,7 +91,7 @@ const NearbyHubsList = () => {
 export default function App() {
   const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
   const [nextPlanet, setNextPlanet] = useState<Planet | null>(null);
-  const [resetTrigger, setResetTrigger] = useState(0); 
+  const [resetTrigger, setResetTrigger] = useState(0);
 
   const handleScore = useCallback((points: number) => {
     if (gameState.status !== GameStatus.PLAYING) return;
@@ -176,14 +103,19 @@ export default function App() {
     });
   }, [gameState.status]);
 
-  const handleBallLost = useCallback(() => {
+  const handleBallLost = useCallback(async () => {
     if (gameState.status !== GameStatus.PLAYING) return;
-    setGameState(prev => {
-      const newLives = prev.lives - 1;
-      return newLives < 0 ? { ...prev, status: GameStatus.GAME_OVER } : { ...prev, lives: newLives };
-    });
-    setResetTrigger(n => n + 1);
-  }, [gameState.status]);
+    
+    const newLives = gameState.lives - 1;
+    if (newLives < 0) {
+        setGameState(prev => ({ ...prev, status: GameStatus.GAME_OVER }));
+        const review = await generatePerformanceReview(gameState);
+        setGameState(prev => ({ ...prev, performanceReview: review }));
+    } else {
+        setGameState(prev => ({ ...prev, lives: newLives }));
+        setResetTrigger(n => n + 1);
+    }
+  }, [gameState]);
 
   const handleWarpEnter = useCallback(async () => {
     if (!gameState.warpReady || gameState.status === GameStatus.WARPING) return;
@@ -203,12 +135,18 @@ export default function App() {
         }));
         setNextPlanet(null);
         setResetTrigger(n => n + 1); 
-    }, 6000);
+    }, 8000); // Longer timeout for video appreciation
   }, [gameState.warpReady, gameState.status, gameState]);
+
+  const initKeySelection = async () => {
+      // @ts-ignore
+      await window.aistudio.openSelectKey();
+      setGameState(p => ({...p, status: GameStatus.PLAYING}));
+  };
 
   return (
     <div className="w-full h-full relative bg-black select-none overflow-hidden text-white">
-      <div className={`w-full h-full transition-all duration-[2s] ${gameState.status === GameStatus.WARPING ? 'opacity-0 scale-90 blur-3xl' : 'opacity-100 scale-100 blur-0'}`}>
+      <div className={`w-full h-full transition-opacity duration-1000 ${gameState.status === GameStatus.PLAYING ? 'opacity-100' : 'opacity-20 blur-sm'}`}>
         <GameScene 
             planet={gameState.currentPlanet} 
             onScore={handleScore}
@@ -221,33 +159,43 @@ export default function App() {
       </div>
 
       {gameState.status === GameStatus.MENU && (
-        <div className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 animate-in fade-in duration-1000">
-          <h1 className="text-8xl font-black text-blue-500 mb-4 font-display italic tracking-tighter drop-shadow-[0_0_30px_rgba(59,130,246,0.5)]">VOID CADET</h1>
-          <p className="text-blue-200/60 font-mono tracking-[0.5em] mb-12 uppercase">The Infinite Arcade</p>
+        <div className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 animate-in fade-in">
+          <h1 className="text-8xl font-black text-blue-500 mb-8 font-display italic tracking-tighter">VOID CADET</h1>
           <button 
-            onClick={() => setGameState(p => ({...p, status: GameStatus.PLAYING}))} 
-            className="px-16 py-5 bg-blue-600 font-black rounded-lg hover:bg-blue-500 transition-all text-xl shadow-[0_0_50px_rgba(37,99,235,0.4)] hover:scale-105 active:scale-95"
+            onClick={() => setGameState(p => ({...p, status: GameStatus.KEY_SELECTION}))} 
+            className="px-16 py-5 bg-blue-600 font-black rounded hover:bg-blue-500 transition-all text-xl"
           >
             INITIATE MISSION
           </button>
-          <NearbyHubsList />
+        </div>
+      )}
+
+      {gameState.status === GameStatus.KEY_SELECTION && (
+        <div className="absolute inset-0 z-50 bg-indigo-950/90 flex flex-col items-center justify-center p-8 text-center">
+            <h2 className="text-4xl font-bold mb-4">VE-O ENGINE COMPLIANCE</h2>
+            <p className="max-w-md mb-8 text-indigo-200">Cinematic warp generation requires a paid API key for high-compute video processing. Please select your project.</p>
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-blue-400 underline mb-6 block">Billing Documentation</a>
+            <button 
+                onClick={initKeySelection}
+                className="px-12 py-4 bg-white text-indigo-900 font-bold rounded-full hover:scale-105 transition-transform"
+            >
+                SELECT API KEY
+            </button>
         </div>
       )}
 
       {gameState.status === GameStatus.GAME_OVER && (
-        <div className="absolute inset-0 z-50 bg-red-950/95 flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
-          <h2 className="text-8xl font-black mb-4 tracking-tighter text-red-500 font-display italic">CRITICAL FAILURE</h2>
-          <div className="text-2xl font-mono mb-12 text-red-200/50">SYSTEM INTEGRITY COMPROMISED</div>
-          <button 
-            onClick={() => location.reload()} 
-            className="px-16 py-5 border-4 border-white font-black rounded-lg hover:bg-white hover:text-black transition-all text-xl"
-          >
-            REBOOT CORE
-          </button>
+        <div className="absolute inset-0 z-50 bg-red-950/95 flex flex-col items-center justify-center p-8 text-center" role="alert">
+          <h2 className="text-7xl font-black mb-4 text-red-500 font-display italic">MISSION FAILED</h2>
+          <div className="max-w-xl bg-black/40 p-6 rounded border border-red-500/20 mb-8">
+              <h3 className="text-xs uppercase tracking-widest text-red-400 mb-2">AI Performance Debrief</h3>
+              <p className="text-lg italic text-red-100">{gameState.performanceReview || "Analyzing fatal errors..."}</p>
+          </div>
+          <button onClick={() => location.reload()} className="px-12 py-4 border-2 border-white font-black rounded">REBOOT SYSTEM</button>
         </div>
       )}
       
-      {(gameState.status === GameStatus.PLAYING || gameState.status === GameStatus.WARPING) && (
+      {gameState.status === GameStatus.PLAYING && (
           <main>
             <HUD state={gameState} />
             <CrewMessage message={gameState.currentPlanet.crewMessage} audio={gameState.currentPlanet.audioBase64} />

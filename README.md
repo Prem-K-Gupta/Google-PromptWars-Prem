@@ -1,33 +1,19 @@
 # VOID CADET: The Infinite Arcade (2026 Edition)
 
-**Vertical:** Entertainment / Gaming / Roguelite Arcade  
-**Tech Stack:** React 18, React Three Fiber, Cannon.js (Physics), Google Gemini API (Multimodal)
+**Vertical:** Entertainment / Generative Gaming  
+**Tech Stack:** React 18, React Three Fiber, Cannon.js, Google Gemini API
 
-## Overview
-Void Cadet is the ultimate evolution of the classic pinball genre. Instead of a single static table, it offers an infinite, procedurally generated galaxy. Every time you score enough to "Warp," the entire universe—physics, visuals, and narrative—is reconstructed in real-time by Gemini.
+## Advanced Google Services Integration
+This version implements a high-tier integration of Google's newest multimodal services:
 
-## Approach & Logic
-- **The "Warp" Cycle**: The core gameplay loop involves scoring to charge a "Warp Gate." Once entered, the current game context (score, artifact count, playstyle) is passed to Gemini 3 Flash.
-- **Multimodal Generation**: 
-    - **Visuals**: `gemini-2.5-flash-image` generates unique planetary backdrops.
-    - **Physics**: Gemini dictates gravity, friction, and slope variables, which are hot-swapped into the Cannon.js physics engine.
-    - **Audio**: `gemini-2.5-flash-preview-tts` provides real-time tactical voice lines for the Starship AI.
-- **Grounding Integration**:
-    - **Search Grounding**: Planet names and lore are derived from real astronomical discoveries (exoplanets) found via Google Search.
-    - **Maps Grounding**: The main menu syncs with the player's physical location (Geolocation) to show real-world observatories and space centers, turning a virtual game into a real-world exploration hub.
+- **Cinematic Warp (Veo 3.1)**: Every warp sequence triggers the `veo-3.1-fast-generate-preview` model to generate a custom 720p 16:9 video of the spacecraft approaching the next generated planet.
+- **Thinking Debriefs (Gemini 3 Pro)**: On Game Over, the model uses a high `thinkingBudget` (16,000 tokens) to analyze game stats and provide a grounded, contextual performance review.
+- **Grounding & Maps**: 
+    - **Google Maps**: Identifies real-world space research centers near the player's physical location.
+    - **Google Search**: Feeds real-time 2024/2025 space news into the HUD and generates planet lore based on recent exoplanet discoveries.
+- **Speech (TTS)**: The AI commander uses `gemini-2.5-flash-preview-tts` for dynamic mission briefings.
 
-## How it Works
-1. **Frontend**: React handles the state and UI. React Three Fiber renders the 3D table.
-2. **Physics**: Cannon.js simulates a high-speed pinball.
-3. **AI Layer**: `geminiService.ts` acts as the "Game Master," coordinating multimodal API calls.
-4. **Synchronization**: When a "Warp" occurs, the UI enters a 6-second transition state. During this time, the next planet's configuration, image, and voice line are fetched concurrently to ensure a seamless arrival.
-
-## Security & Reliability
-- **Safety**: No API keys are stored in the client; they are injected via environment variables.
-- **Robustness**: Fallback planet configurations are provided to ensure the game never crashes if an API limit is reached.
-- **Efficiency**: 3D assets use shared geometries and materials to maintain high FPS on mobile and desktop.
-
-## Accessibility
-- **Screen Readers**: All AI crew messages use ARIA live regions.
-- **Navigation**: Keyboard-centric controls (Arrows/Space) allow for precise play without a mouse.
-- **Visuals**: High-contrast neon themes ensure HUD visibility.
+## Compliance & Security
+- **Billing Integrity**: Implements the mandatory `window.aistudio.openSelectKey()` flow to ensure users provide valid billing for the high-compute Veo generation models.
+- **Accessibility**: Optimized ARIA regions for AI speech and performance debriefs, ensuring screen readers can follow the narrative flow.
+- **Resource Efficiency**: 3D geometries are optimized for low-overhead rendering, and video assets are loaded as direct streams with secure API key appending.

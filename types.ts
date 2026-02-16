@@ -31,6 +31,7 @@ export interface Planet {
   bossName?: string;
   artifact?: Upgrade;
   imageUrl?: string;
+  videoUrl?: string; // New: Cinematic entry video
   audioBase64?: string;
   sources?: string[];
 }
@@ -39,7 +40,8 @@ export enum GameStatus {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
   WARPING = 'WARPING',
-  GAME_OVER = 'GAME_OVER'
+  GAME_OVER = 'GAME_OVER',
+  KEY_SELECTION = 'KEY_SELECTION' // New: Billing compliance step
 }
 
 export interface GameState {
@@ -52,4 +54,5 @@ export interface GameState {
   warpCharge: number;
   artifacts: Upgrade[];
   scoreMultiplier: number;
+  performanceReview?: string; // New: AI post-game analysis
 }
