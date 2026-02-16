@@ -107,7 +107,7 @@ export const Plunger: React.FC<{ position: [number, number, number]; color: stri
         type: 'Kinematic',
         position,
         args: [0.8, 1, 1],
-        material: { friction: 0.1, restitution: 1.0 } // High restitution for a good kick
+        material: { friction: 0.1, restitution: 1.5 } // High restitution for a good kick
     }));
     
     // Track current Z position for manual animation
@@ -121,7 +121,7 @@ export const Plunger: React.FC<{ position: [number, number, number]; color: stri
         const targetZ = isPressed ? pullBackZ : startZ;
         
         // Speed: Slow pull back, fast release
-        const speed = isPressed ? 5 : 80; 
+        const speed = isPressed ? 5 : 100; // Very fast release
         
         const diff = targetZ - currentZ.current;
         
