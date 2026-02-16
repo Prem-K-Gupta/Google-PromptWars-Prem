@@ -1,7 +1,6 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { Planet, GameState } from '../types';
 
-// Helper to get API Key safely
 const getApiKey = () => {
   return process.env.API_KEY || '';
 };
@@ -15,59 +14,76 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
 
   const ai = new GoogleGenAI({ apiKey });
 
+  // Analyze performance
+  const isHighPerformance = currentGameState.score > 10000;
+  
+  const context = isHighPerformance 
+    ? "Player is dominating. Generate a hostile, high-gravity world with a powerful artifact."
+    : "Player is struggling. Generate a wondrous, low-gravity world with a helpful artifact.";
+
   const systemInstruction = `
-    You are the Game Master for "VOID CADET", a procedural sci-fi pinball game.
-    Your job is to generate the next planet (level) the player warps to based on their recent performance.
+    You are the Game Master for "VOID CADET".
+    Generate the next planet in this infinite procedural pinball journey.
     
-    Variables to tweak:
-    - Gravity: Standard is -9.8. Lower (e.g., -5) is floaty/space. Higher (e.g., -20) is heavy/industrial.
-    - Friction: Standard is 0.1. Lower (0.01) is ice. Higher (0.5) is mud/jungle.
-    - Restitution (Bounciness): Standard is 0.5. Higher (0.9) is energetic/rubber. Lower (0.1) is dead/rock.
-    - Slope: Standard is 5. Higher means ball rolls down faster.
+    ${context}
     
-    If the player has a high score, make it harder (higher gravity, unpredictable).
-    If low score, make it easier or trippier.
-    Create a cool sci-fi name and theme.
+    Physics:
+    - Normal Gravity is -12. Go lower (-5) for space/floaty, higher (-20) for heavy.
+    - Normal Slope is 8.
+    
+    Artifacts:
+    - Create a cool sci-fi upgrade item found on this planet.
+    - Effect types: 'score_multiplier', 'extra_life', 'warp_charge_boost'.
   `;
 
   const prompt = `
+    Previous Planet: ${currentGameState.currentPlanet.name}.
     Current Score: ${currentGameState.score}.
-    Current Planet: ${currentGameState.currentPlanet.name}.
-    Lives Left: ${currentGameState.lives}.
+    Lives: ${currentGameState.lives}.
     
-    Generate a new Planet unique from the last one.
+    Generate next planet JSON.
   `;
 
   const planetSchema: Schema = {
     type: Type.OBJECT,
     properties: {
-      name: { type: Type.STRING, description: "Name of the planet" },
-      description: { type: Type.STRING, description: "Short lore description" },
-      crewMessage: { type: Type.STRING, description: "A message from the ship's AI tactician about this world" },
-      bossName: { type: Type.STRING, description: "Name of the boss entity controlling this sector" },
+      name: { type: Type.STRING },
+      description: { type: Type.STRING },
+      crewMessage: { type: Type.STRING },
+      bossName: { type: Type.STRING },
       physics: {
         type: Type.OBJECT,
         properties: {
-          gravity: { type: Type.NUMBER, description: "Y-axis gravity force (negative)" },
-          friction: { type: Type.NUMBER, description: "Surface friction 0.0 to 1.0" },
-          restitution: { type: Type.NUMBER, description: "Bounciness 0.0 to 1.5" },
-          slope: { type: Type.NUMBER, description: "Table slope gravity factor" },
+          gravity: { type: Type.NUMBER },
+          friction: { type: Type.NUMBER },
+          restitution: { type: Type.NUMBER },
+          slope: { type: Type.NUMBER },
         },
         required: ["gravity", "friction", "restitution", "slope"]
       },
       theme: {
         type: Type.OBJECT,
         properties: {
-          primaryColor: { type: Type.STRING, description: "Hex color for main structures" },
-          secondaryColor: { type: Type.STRING, description: "Hex color for accents" },
-          floorColor: { type: Type.STRING, description: "Hex color for the table floor" },
-          ambientIntensity: { type: Type.NUMBER, description: "Light intensity 0.1 to 1.0" },
-          neonColor: { type: Type.STRING, description: "Emission hex color" },
+          primaryColor: { type: Type.STRING },
+          secondaryColor: { type: Type.STRING },
+          floorColor: { type: Type.STRING },
+          ambientIntensity: { type: Type.NUMBER },
+          neonColor: { type: Type.STRING },
         },
         required: ["primaryColor", "secondaryColor", "floorColor", "ambientIntensity", "neonColor"]
+      },
+      artifact: {
+        type: Type.OBJECT,
+        properties: {
+            name: { type: Type.STRING },
+            description: { type: Type.STRING },
+            icon: { type: Type.STRING, description: "A single emoji representing the artifact" },
+            effectType: { type: Type.STRING, enum: ['score_multiplier', 'extra_life', 'warp_charge_boost'] }
+        },
+        required: ["name", "description", "icon", "effectType"]
       }
     },
-    required: ["name", "description", "crewMessage", "bossName", "physics", "theme"]
+    required: ["name", "description", "crewMessage", "bossName", "physics", "theme", "artifact"]
   };
 
   try {
@@ -97,30 +113,36 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
 
 const generateFallbackPlanet = (): Planet => {
   const themes = [
-    { name: 'Magma Core', color: '#ef4444', sec: '#7f1d1d', floor: '#450a0a', grav: -9.8 },
-    { name: 'Cryo Station', color: '#06b6d4', sec: '#155e75', floor: '#083344', grav: -6 },
-    { name: 'Neon City', color: '#d946ef', sec: '#86198f', floor: '#2e1065', grav: -12 },
+    { name: 'Obsidian Sanctum', color: '#7f1d1d', sec: '#ef4444', floor: '#2a0a0a', grav: -15, neon: '#fca5a5' },
+    { name: 'Azure Expanse', color: '#0ea5e9', sec: '#0284c7', floor: '#082f49', grav: -8, neon: '#7dd3fc' },
+    { name: 'Xenon Prime', color: '#d946ef', sec: '#a21caf', floor: '#2e1065', grav: -12, neon: '#f0abfc' },
   ];
   const t = themes[Math.floor(Math.random() * themes.length)];
   
   return {
     id: crypto.randomUUID(),
     name: t.name,
-    description: "Communications offline. Approaching unknown sector.",
-    crewMessage: "Sensors are scrambling. Drive manually!",
-    bossName: "Unknown Entity",
+    description: "Navigational data corrupted. Entering unmapped sector.",
+    crewMessage: "Systems rebooting. Adapt to local gravity immediately.",
+    bossName: "Signal Ghost",
     physics: {
       gravity: t.grav,
       friction: 0.1,
       restitution: 0.6,
-      slope: 5,
+      slope: 8,
     },
     theme: {
       primaryColor: t.color,
       secondaryColor: t.sec,
       floorColor: t.floor,
       ambientIntensity: 0.6,
-      neonColor: t.color,
+      neonColor: t.neon,
+    },
+    artifact: {
+        name: "Emergency Battery",
+        description: "A standard issue power cell.",
+        icon: "🔋",
+        effectType: "warp_charge_boost"
     }
   };
 };

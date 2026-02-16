@@ -1,20 +1,20 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# VOID CADET: The Infinite Arcade
 
-# Run and deploy your AI Studio app
+**Vertical:** Entertainment / Gaming  
+**Tech Stack:** React, React Three Fiber, Cannon.js, Google Gemini API
 
-This contains everything you need to run your app locally.
+## Overview
+Void Cadet is a reimagining of the classic space pinball game for the AI era. Instead of a static table, the game features an infinite, procedurally generated universe. Every time the player activates the "Warp Gate", Google Gemini generates a completely new planet with unique physics (gravity, friction), visual themes, and lore.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1X0MMRFh2ybI4IAabxryhfCdaIabV8UF6
+## How It Works
+1.  **Core Loop:** The player scores points to charge the Warp Drive.
+2.  **GenAI Injection:** Upon entering the Warp Gate, the game snapshot (score, lives, playstyle) is sent to Gemini.
+3.  **Procedural Generation:** Gemini hallucinates a JSON configuration for the next level, including:
+    -   **Physics:** Modifying the physics engine's gravity, restitution (bounciness), and friction.
+    -   **Visuals:** Defining a color palette and lighting scheme.
+    -   **Lore:** Generating a name, description, and "Tactician" crew message.
+4.  **Real-time Adaptation:** The React frontend hydrates the state with this new config instantly, creating an endless "Roguelite" pinball experience.
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Assumptions
+-   The user has a valid `API_KEY` for Google GenAI in their environment.
+-   The browser supports WebGL.

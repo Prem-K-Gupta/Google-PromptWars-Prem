@@ -13,6 +13,13 @@ export interface VisualTheme {
   neonColor: string;
 }
 
+export interface Upgrade {
+  name: string;
+  description: string;
+  icon: string; // Emoji representation
+  effectType: 'score_multiplier' | 'extra_life' | 'warp_charge_boost';
+}
+
 export interface Planet {
   id: string;
   name: string;
@@ -21,19 +28,24 @@ export interface Planet {
   theme: VisualTheme;
   crewMessage: string;
   bossName?: string;
+  artifact?: Upgrade;
+}
+
+export enum GameStatus {
+  MENU = 'MENU',
+  PLAYING = 'PLAYING',
+  WARPING = 'WARPING',
+  GAME_OVER = 'GAME_OVER'
 }
 
 export interface GameState {
+  status: GameStatus;
   score: number;
   highScore: number;
   currentPlanet: Planet;
-  isWarping: boolean;
   warpReady: boolean;
   lives: number;
   warpCharge: number; // 0 to 100
-}
-
-export interface WarpData {
-  planet: Planet;
-  generationDuration: number;
+  artifacts: Upgrade[];
+  scoreMultiplier: number;
 }

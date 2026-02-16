@@ -1,60 +1,88 @@
 /// <reference lib="dom" />
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Physics, useSphere, usePlane } from '@react-three/cannon';
-import { OrbitControls, Stars, Text, Float } from '@react-three/drei';
-import { GameState, Planet, PhysicsModifiers } from '../types';
-import { Wall, Bumper, WarpGate } from './TableObjects';
+import { OrbitControls, Stars, Text, Float, Sparkles, PerspectiveCamera } from '@react-three/drei';
+import { Planet, GameStatus } from '../types';
+import { Wall, Bumper, WarpGate, Slingshot, Plunger, BossTarget } from './TableObjects';
 import { SimpleFlipper } from './Flippers';
-import * as THREE from 'three';
 
 // --- Ball ---
-const Ball = ({ startPos, onLost, theme }: { startPos: [number, number, number], onLost: () => void, theme: any }) => {
+const Ball = ({ startPos, onLost, theme, isActive }: { startPos: [number, number, number], onLost: () => void, theme: any, isActive: boolean }) => {
   const [ref, api] = useSphere(() => ({
     mass: 1,
     position: startPos,
     args: [0.3],
-    material: { friction: 0.05, restitution: 0.7 }, // Base ball physics
+    material: { friction: 0.05, restitution: 0.6 },
+    allowSleep: false,
   }));
   
-  // Name the body for collision detection
   useEffect(() => {
       // @ts-ignore
       ref.current.name = 'ball';
   }, [ref]);
 
+  // Respawn logic
+  useEffect(() => {
+      if (isActive) {
+          api.position.set(startPos[0], startPos[1], startPos[2]);
+          api.velocity.set(0,0,0);
+          api.angularVelocity.set(0,0,0);
+      }
+  }, [isActive, startPos, api]);
+
   useFrame(() => {
     if (!ref.current) return;
-    // Check if ball fell out
-    if (ref.current.position.z > 12) { // Bottom of table
+    // Ball Lost Logic
+    if (ref.current.position.z > 15) { 
       onLost();
+      // Reset temporarily to avoid multi-trigger
       api.position.set(startPos[0], startPos[1], startPos[2]);
       api.velocity.set(0, 0, 0);
-      api.angularVelocity.set(0, 0, 0);
+    }
+    // Glitch prevention: If ball falls through floor
+    if (ref.current.position.y < -5) {
+        api.position.set(startPos[0], startPos[1], startPos[2]);
+        api.velocity.set(0, 0, 0);
     }
   });
 
   return (
     <mesh ref={ref as any} castShadow>
       <sphereGeometry args={[0.3, 32, 32]} />
-      <meshStandardMaterial color="#fff" metalness={0.8} roughness={0.2} emissive={theme.neonColor} emissiveIntensity={0.5} />
+      <meshStandardMaterial 
+        color="#fff" 
+        metalness={0.9} 
+        roughness={0.1} 
+        emissive={theme.neonColor} 
+        emissiveIntensity={0.8} 
+      />
+      <Sparkles count={5} scale={1} size={2} speed={0.4} opacity={0.5} color={theme.neonColor} />
     </mesh>
   );
 };
 
-// --- Floor ---
+// --- Floor (Glass Table Effect) ---
 const Floor = ({ color, friction }: { color: string, friction: number }) => {
   const [ref] = usePlane(() => ({
-    rotation: [-Math.PI / 2, 0, 0], // Flat on ground (initially), we will rotate camera or gravity
+    rotation: [-Math.PI / 2, 0, 0],
     position: [0, -0.5, 0],
-    material: { friction: friction, restitution: 0.2 }
+    material: { friction: friction, restitution: 0.3 }
   }));
   return (
-    <mesh ref={ref as any} receiveShadow>
-      <planeGeometry args={[20, 30]} />
-      <meshStandardMaterial color={color} metalness={0.5} roughness={0.5} />
-      <gridHelper args={[20, 20, '#444', '#222']} rotation={[-Math.PI/2, 0, 0]} position={[0, 0.01, 0]} />
-    </mesh>
+    <group>
+        <mesh ref={ref as any} receiveShadow>
+            <planeGeometry args={[20, 40]} />
+            <meshPhysicalMaterial 
+                color={color} 
+                metalness={0.3} 
+                roughness={0.2} 
+                transmission={0.2}
+                clearcoat={1}
+            />
+        </mesh>
+        <gridHelper args={[20, 10, '#ffffff', '#555555']} position={[0, -0.4, 0]} />
+    </group>
   );
 };
 
@@ -65,21 +93,23 @@ interface SceneProps {
   onWarpEnter: () => void;
   onBallLost: () => void;
   warpReady: boolean;
-  active: boolean; // Is game playing
+  gameStatus: GameStatus;
+  resetTrigger: number; // Increment to respawn ball
 }
 
-export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, onBallLost, warpReady, active }) => {
-  const [keys, setKeys] = useState({ left: false, right: false });
+export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, onBallLost, warpReady, gameStatus, resetTrigger }) => {
+  const [keys, setKeys] = useState({ left: false, right: false, space: false });
 
-  // Input Handling
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'a') setKeys(k => ({ ...k, left: true }));
       if (e.key === 'ArrowRight' || e.key === 'd') setKeys(k => ({ ...k, right: true }));
+      if (e.code === 'Space') setKeys(k => ({ ...k, space: true }));
     };
     const handleUp = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'a') setKeys(k => ({ ...k, left: false }));
       if (e.key === 'ArrowRight' || e.key === 'd') setKeys(k => ({ ...k, right: false }));
+      if (e.code === 'Space') setKeys(k => ({ ...k, space: false }));
     };
     window.addEventListener('keydown', handleDown);
     window.addEventListener('keyup', handleUp);
@@ -89,80 +119,128 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
     };
   }, []);
 
-  // Calculate Physics Gravity Vector based on Planet Data
-  // Standard Gravity is -9.8 Y.
-  // "Slope" simulates table tilt. In 3D physics, usually we just tilt the gravity vector.
-  // Z+ is "down" the screen. So gravity should pull towards Z+.
-  // And Y- is "down" into the floor.
   const gravity: [number, number, number] = [
     0, 
     planet.physics.gravity, 
-    planet.physics.slope // Positive Z pulls ball "down" the table
+    planet.physics.slope 
   ];
 
   return (
-    <Canvas shadows camera={{ position: [0, 15, 12], fov: 45 }}>
+    <Canvas shadows dpr={[1, 2]}>
+      <PerspectiveCamera makeDefault position={[0, 18, 14]} fov={35} />
       <color attach="background" args={[planet.theme.floorColor]} />
+      <fog attach="fog" args={[planet.theme.floorColor, 10, 60]} />
       
+      {/* Lighting */}
       <ambientLight intensity={planet.theme.ambientIntensity} />
-      <pointLight position={[0, 10, 0]} intensity={1} castShadow />
-      <spotLight position={[0, 15, 5]} angle={0.5} penumbra={1} intensity={2} color={planet.theme.primaryColor} castShadow />
-
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      <pointLight position={[0, 10, 0]} intensity={1} castShadow distance={20} />
+      <spotLight 
+        position={[0, 20, 10]} 
+        angle={0.4} 
+        penumbra={1} 
+        intensity={2} 
+        color={planet.theme.primaryColor} 
+        castShadow 
+        shadow-bias={-0.0001}
+      />
+      
+      <Stars radius={100} depth={50} count={3000} factor={4} saturation={1} fade speed={0.5} />
 
       <Physics gravity={gravity} defaultContactMaterial={{ restitution: planet.physics.restitution, friction: planet.physics.friction }}>
         
-        {/* The Ball */}
-        <Ball startPos={[4, 1, 8]} onLost={onBallLost} theme={planet.theme} />
-
-        {/* Table Floor */}
+        {/* Ball spawns in Plunger Lane at [6.5, 0.5, 12] */}
+        <Ball 
+            startPos={[6.5, 0.5, 11]} 
+            onLost={onBallLost} 
+            theme={planet.theme} 
+            isActive={resetTrigger > 0}
+        />
+        
         <Floor color={planet.theme.floorColor} friction={planet.physics.friction} />
 
-        {/* Walls */}
-        <Wall args={[1, 2, 22]} position={[-6, 0, 0]} color={planet.theme.primaryColor} /> {/* Left */}
-        <Wall args={[1, 2, 22]} position={[6, 0, 0]} color={planet.theme.primaryColor} />  {/* Right */}
-        <Wall args={[13, 2, 1]} position={[0, 0, -11]} color={planet.theme.primaryColor} /> {/* Top */}
+        {/* --- Table Layout --- */}
 
-        {/* Angled Wall at bottom left/right to funnel to flippers */}
-        <Wall args={[1, 2, 6]} position={[-4, 0, 8]} rotation={[0, -0.5, 0]} color={planet.theme.secondaryColor} />
-        <Wall args={[1, 2, 6]} position={[4, 0, 8]} rotation={[0, 0.5, 0]} color={planet.theme.secondaryColor} />
+        {/* Outer Box */}
+        <Wall args={[1, 4, 30]} position={[-8, 0, 0]} color={planet.theme.primaryColor} /> 
+        <Wall args={[1, 4, 30]} position={[8, 0, 0]} color={planet.theme.primaryColor} />  
+        <Wall args={[17, 4, 1]} position={[0, 0, -12]} color={planet.theme.primaryColor} />
 
-        {/* Bumpers */}
-        <Bumper position={[0, 0.5, -4]} theme={planet.theme} onHit={() => onScore(100)} />
-        <Bumper position={[-2.5, 0.5, -2]} theme={planet.theme} onHit={() => onScore(100)} />
-        <Bumper position={[2.5, 0.5, -2]} theme={planet.theme} onHit={() => onScore(100)} />
+        {/* Plunger Lane Divider (Right) */}
+        {/* Goes from bottom up to top arch */}
+        <Wall args={[0.5, 2, 22]} position={[5.5, 0, 3]} color={planet.theme.secondaryColor} />
+        
+        {/* Top Arch (Curve) */}
+        <Wall args={[6, 2, 1]} position={[-3, 0, -10]} rotation={[0, 0.3, 0]} color={planet.theme.secondaryColor} />
+        <Wall args={[6, 2, 1]} position={[2, 0, -10]} rotation={[0, -0.3, 0]} color={planet.theme.secondaryColor} />
+
+        {/* Bumpers Cluster */}
+        <Bumper position={[0, 0.5, -6]} theme={planet.theme} onHit={() => onScore(100)} />
+        <Bumper position={[-2.5, 0.5, -4]} theme={planet.theme} onHit={() => onScore(100)} />
+        <Bumper position={[2.5, 0.5, -4]} theme={planet.theme} onHit={() => onScore(100)} />
+
+        {/* Boss Target */}
+        <BossTarget 
+            position={[0, 2, -2]} 
+            name={planet.bossName || "BOSS"} 
+            theme={planet.theme}
+            onHit={() => onScore(500)}
+        />
+
+        {/* Slingshots (Near Flippers) */}
+        {/* Left Slingshot */}
+        <Slingshot 
+            position={[-4.5, 0.5, 7]} 
+            rotation={[0, 0.4, 0]} 
+            theme={planet.theme} 
+            onHit={() => onScore(50)} 
+        />
+        {/* Right Slingshot */}
+        <Slingshot 
+            position={[3.5, 0.5, 7]} 
+            rotation={[0, -0.4, 0]} 
+            theme={planet.theme} 
+            onHit={() => onScore(50)} 
+        />
+
+        {/* In-lanes (Guides to flippers) */}
+        {/* Left In-lane */}
+        <Wall args={[0.2, 1, 5]} position={[-6, 0, 9]} rotation={[0, 0.15, 0]} color={planet.theme.secondaryColor} />
+        {/* Right In-lane */}
+        <Wall args={[0.2, 1, 5]} position={[2, 0, 9]} rotation={[0, -0.15, 0]} color={planet.theme.secondaryColor} />
 
         {/* Flippers */}
-        <SimpleFlipper side="left" position={[-2, 0.5, 9]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.left} />
-        <SimpleFlipper side="right" position={[2, 0.5, 9]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.right} />
+        <SimpleFlipper side="left" position={[-2.5, 0.5, 11]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.left} />
+        <SimpleFlipper side="right" position={[2.5, 0.5, 11]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.right} />
 
-        {/* Warp Gate (Top Center Ramp Area) */}
+        {/* Plunger Mechanism */}
+        <Plunger position={[6.5, 0.5, 13]} color={planet.theme.secondaryColor} isPressed={keys.space} />
+
+        {/* Warp Gate (Top Center) */}
         <WarpGate 
-            position={[0, 0.5, -9]} 
+            position={[0, 0.5, -11]} 
             isOpen={warpReady} 
             onEnter={onWarpEnter} 
             theme={planet.theme} 
         />
-        
-        {/* Plunger Lane Wall (Right side) */}
-        <Wall args={[0.5, 1, 18]} position={[5, 0, 2]} color={planet.theme.secondaryColor} />
 
       </Physics>
       
-      {/* 3D Text Overlay in World Space */}
-      <Float speed={2} rotationIntensity={0.1} floatIntensity={0.5}>
+      {/* 3D Title */}
+      <Float speed={2} rotationIntensity={0.1} floatIntensity={0.2}>
          <Text 
-            position={[0, 5, -15]} 
-            fontSize={2} 
+            position={[0, 8, -15]} 
+            fontSize={3} 
             color={planet.theme.neonColor}
             anchorX="center" 
             anchorY="middle"
+            font="https://fonts.gstatic.com/s/audiowide/v16/l7gdbjpo0cum0ckerdt6.woff"
          >
            {planet.name.toUpperCase()}
          </Text>
       </Float>
       
-      <OrbitControls enableZoom={false} enableRotate={false} minPolarAngle={Math.PI/4} maxPolarAngle={Math.PI/3} />
+      {/* Debug Controls (Optional) */}
+      {/* <OrbitControls /> */}
     </Canvas>
   );
 };
