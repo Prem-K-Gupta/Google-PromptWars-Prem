@@ -77,7 +77,7 @@ export const Slingshot: React.FC<{ position: [number, number, number]; rotation:
     position,
     rotation,
     args: [0.3, 1, 3.5], 
-    material: { restitution: 2.0, friction: 0 }, // Very bouncy
+    material: { restitution: 2.0, friction: 0 }, 
     onCollide: (e) => {
         if(e.body.name === 'ball' && !isHit) {
             onHit();
@@ -107,7 +107,7 @@ export const Plunger: React.FC<{ position: [number, number, number]; color: stri
         type: 'Kinematic',
         position,
         args: [0.8, 1, 1],
-        material: { friction: 0, restitution: 0.8 }
+        material: { friction: 0.1, restitution: 1.0 } // High restitution for a good kick
     }));
     
     // Track current Z position for manual animation
@@ -115,28 +115,32 @@ export const Plunger: React.FC<{ position: [number, number, number]; color: stri
 
     useFrame((state, delta) => {
         const startZ = position[2];
-        const pullBackZ = startZ + 3; // Pull back distance
+        const pullBackZ = startZ + 3; // Pull back distance (visual)
         
+        // When pressed, move BACK (increase Z). When released, move to start.
         const targetZ = isPressed ? pullBackZ : startZ;
         
         // Speed: Slow pull back, fast release
-        const speed = isPressed ? 5 : 60; 
+        const speed = isPressed ? 5 : 80; 
         
         const diff = targetZ - currentZ.current;
         
-        // Don't overshoot
-        const move = Math.sign(diff) * Math.min(Math.abs(diff), speed * delta);
+        // Calculate step
+        const step = Math.sign(diff) * Math.min(Math.abs(diff), speed * delta);
         
-        currentZ.current += move;
-        
-        // Update Position
-        api.position.set(position[0], position[1], currentZ.current);
-        
-        // CRITICAL: Update Velocity. 
-        // Physics engine needs velocity to transfer momentum to the ball.
-        // Velocity = distance / time
-        if (delta > 0) {
-            api.velocity.set(0, 0, move / delta);
+        if (Math.abs(diff) > 0.01) {
+            currentZ.current += step;
+            api.position.set(position[0], position[1], currentZ.current);
+            
+            // Apply velocity for physics impact
+            // If moving forward (negative Z direction relative to pullback), ensure high velocity
+            if (delta > 0) {
+                api.velocity.set(0, 0, step / delta);
+            }
+        } else {
+            // Stop
+            api.velocity.set(0, 0, 0);
+            api.position.set(position[0], position[1], targetZ);
         }
     });
 
