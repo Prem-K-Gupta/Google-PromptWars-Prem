@@ -1,10 +1,9 @@
-
 import { GoogleGenAI, Type, Schema, Modality } from "@google/genai";
 import { Planet, GameState } from '../types';
 
 const getApiKey = () => process.env.API_KEY || '';
 
-// Decoding helper for TTS as per guidelines
+// Decoding helper for TTS
 function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -46,6 +45,33 @@ export const playCrewAudio = async (base64Audio: string) => {
   }
 };
 
+export const fetchNearbySpaceHubs = async (lat: number, lng: number) => {
+  const apiKey = getApiKey();
+  if (!apiKey) return [];
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite-latest",
+      contents: "List 3 real-world space centers, planetariums, or observatories near these coordinates.",
+      config: {
+        tools: [{ googleMaps: {} }],
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: lat, longitude: lng }
+          }
+        }
+      },
+    });
+    return response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map(c => ({
+      title: c.maps?.title || "Space Observation Point",
+      uri: c.maps?.uri || "#"
+    })) || [];
+  } catch (e) {
+    console.error("Maps grounding failed", e);
+    return [];
+  }
+};
+
 export const generateCrewSpeech = async (text: string): Promise<string | undefined> => {
   const apiKey = getApiKey();
   if (!apiKey) return undefined;
@@ -58,7 +84,7 @@ export const generateCrewSpeech = async (text: string): Promise<string | undefin
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Strong military-style voice
+            prebuiltVoiceConfig: { voiceName: 'Kore' },
           },
         },
       },
@@ -77,7 +103,7 @@ export const generatePlanetImage = async (prompt: string): Promise<string | unde
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
       contents: {
-        parts: [{ text: `A sci-fi digital art painting of the planet ${prompt}. cinematic lighting, high detail, alien architecture, orbital view.` }],
+        parts: [{ text: `A cinematic sci-fi digital art painting of the planet ${prompt}. Ultra-detailed, space aesthetic.` }],
       },
     });
     for (const part of response.candidates[0].content.parts) {
@@ -90,30 +116,25 @@ export const generatePlanetImage = async (prompt: string): Promise<string | unde
   }
 };
 
-// fetchGalacticNews fix: Added missing export used by App.tsx
-export const fetchGalacticNews = async (): Promise<{ text: string; url: string | null; title: string } | undefined> => {
+export const fetchGalacticNews = async () => {
   const apiKey = getApiKey();
   if (!apiKey) return undefined;
   const ai = new GoogleGenAI({ apiKey });
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: "Summarize one recent (2024 or 2025) space discovery in a short sentence.",
+      contents: "Briefly summarize one recent space discovery in 2024 or 2025.",
       config: {
         tools: [{ googleSearch: {} }],
       },
     });
-
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    const firstWeb = groundingChunks?.find(c => c.web)?.web;
-
+    const web = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.find(c => c.web)?.web;
     return {
-      text: response.text?.trim() || "Deep space scanning for news...",
-      url: firstWeb?.uri || null,
-      title: firstWeb?.title || "Galactic Update"
+      text: response.text?.trim() || "Deep space scanning...",
+      url: web?.uri || null,
+      title: web?.title || "Galactic Feed"
     };
   } catch (e) {
-    console.error("News fetch failed", e);
     return undefined;
   }
 };
@@ -124,14 +145,6 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
 
   const ai = new GoogleGenAI({ apiKey });
   
-  const systemInstruction = `
-    You are the Game Master for "VOID CADET".
-    Generate a JSON object for the next planet.
-    Use Google Search to find real astronomical objects for inspiration.
-    Physics: Gravity (-20 heavy to -5 floaty), Normal is -12.
-    Artifacts: Choose one from 'score_multiplier', 'extra_life', 'warp_charge_boost'.
-  `;
-
   const planetSchema: Schema = {
     type: Type.OBJECT,
     properties: {
@@ -177,23 +190,19 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Search for a real exoplanet discovered in 2024/2025. Previous: ${currentGameState.currentPlanet.name}. Generate next planet.`,
+      contents: `Previous sector: ${currentGameState.currentPlanet.name}. Scout a real exoplanet discovered recently for our next jump.`,
       config: {
-        systemInstruction,
+        systemInstruction: "You are the Game Master. Generate a JSON planet config.",
         responseMimeType: "application/json",
         responseSchema: planetSchema,
         tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 4000 } // Use thinking for creative lore & physics balancing
+        thinkingConfig: { thinkingBudget: 4000 }
       },
     });
 
     const data = JSON.parse(response.text || "{}");
-    
-    // Extract search grounding sources as required by guidelines
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    const sources = groundingChunks?.map(c => c.web?.uri).filter((uri): uri is string => !!uri) || [];
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map(c => c.web?.uri).filter((uri): uri is string => !!uri) || [];
 
-    // Concurrently generate multimodal assets
     const [imageUrl, audioBase64] = await Promise.all([
       generatePlanetImage(data.name),
       generateCrewSpeech(data.crewMessage)
@@ -207,31 +216,22 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
       audioBase64
     };
   } catch (error) {
-    console.error("Gemini failed", error);
     return generateFallbackPlanet();
   }
 };
 
-const generateFallbackPlanet = (): Planet => {
-  return {
-    id: crypto.randomUUID(),
-    name: 'Sector Zero',
-    description: "A dark matter anomaly where time stands still.",
-    crewMessage: "Stay alert. The void is watching.",
-    bossName: "Anomaly-9",
-    physics: { gravity: -12, friction: 0.1, restitution: 0.6, slope: 8 },
-    theme: {
-      primaryColor: '#6366f1',
-      secondaryColor: '#4338ca',
-      floorColor: '#0c0a09',
-      ambientIntensity: 0.5,
-      neonColor: '#818cf8',
-    },
-    artifact: {
-        name: "Backup Drive",
-        description: "Standard issue recovery module.",
-        icon: "💾",
-        effectType: "warp_charge_boost"
-    }
-  };
-};
+const generateFallbackPlanet = (): Planet => ({
+  id: crypto.randomUUID(),
+  name: 'Sector Zero',
+  description: "An unmapped dark matter pocket.",
+  crewMessage: "Systems critical. Stay on course.",
+  physics: { gravity: -12, friction: 0.1, restitution: 0.6, slope: 8 },
+  theme: {
+    primaryColor: '#6366f1', secondaryColor: '#4338ca',
+    floorColor: '#0c0a09', ambientIntensity: 0.5, neonColor: '#818cf8',
+  },
+  artifact: {
+      name: "Standard Cell", description: "Minimal power boost.",
+      icon: "🔋", effectType: "warp_charge_boost"
+  }
+});
