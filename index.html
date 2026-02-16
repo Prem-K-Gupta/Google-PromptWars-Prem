@@ -17,11 +17,9 @@
       .audio-bar { width: 3px; background: #60a5fa; animation: audio-bounce 0.5s ease-in-out infinite alternate; }
       @keyframes audio-bounce { from { height: 2px; } to { height: 100%; } }
       
-      /* Accessibility Focus */
-      button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 4px; }
-      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+      button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 4px; border-radius: 4px; }
     </style>
-  <script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@18.2.0",
@@ -39,7 +37,7 @@
   }
 }
 </script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
   </body>
