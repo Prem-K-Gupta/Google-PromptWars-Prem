@@ -1,5 +1,8 @@
 {
   "name": "VOID CADET: The Infinite Arcade",
   "description": "An endless, procedurally generated pinball journey powered by Gemini. Explore the galaxy one table at a time.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
 }

@@ -4,8 +4,9 @@ import { GameScene } from './components/Scene';
 import { INITIAL_GAME_STATE, WARP_THRESHOLD } from './constants';
 import { GameState, Planet, GameStatus } from './types';
 import { generateNextPlanet, fetchGalacticNews, playCrewAudio, fetchNearbySpaceHubs, generatePerformanceReview } from './services/geminiService';
+import { LiveTactician } from './components/LiveTactician';
 
-const HUD = ({ state }: { state: GameState }) => (
+const HUD = ({ state, toggleLive, liveActive }: { state: GameState, toggleLive: () => void, liveActive: boolean }) => (
   <header className="absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none z-10 text-white font-mono">
     <div>
       <h1 className="text-4xl font-black italic tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]">VOID CADET</h1>
@@ -17,12 +18,18 @@ const HUD = ({ state }: { state: GameState }) => (
            ))}
         </div>
       </div>
+      <button 
+        onClick={toggleLive}
+        className={`mt-4 pointer-events-auto px-3 py-1 rounded border text-[10px] font-bold transition-all ${liveActive ? 'bg-blue-600 border-blue-400' : 'bg-gray-800 border-gray-600 opacity-50'}`}
+      >
+        {liveActive ? 'DISABLE COMMS' : 'ENABLE LIVE COMMS'}
+      </button>
     </div>
     <div className="text-right flex flex-col items-end gap-2">
       <div className="text-6xl font-bold tabular-nums">{state.score.toLocaleString()}</div>
       <div className="w-48 h-2 bg-gray-800 rounded-full overflow-hidden">
         <div 
-          className={`h-full transition-all duration-500 ${state.warpReady ? 'bg-green-400' : 'bg-blue-500'}`}
+          className={`h-full transition-all duration-500 ${state.warpReady ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-blue-500'}`}
           style={{ width: `${Math.min(state.warpCharge, 100)}%` }}
         />
       </div>
@@ -36,7 +43,7 @@ const GalacticNewsFeed = () => {
   useEffect(() => { fetchGalacticNews().then(d => d && setNews(d)); }, []);
   if (!news) return null;
   return (
-    <div className="mt-4 max-w-xs bg-indigo-900/30 border border-indigo-500/30 p-2 rounded text-[10px] text-indigo-200 pointer-events-auto">
+    <div className="mt-4 max-w-xs bg-indigo-900/30 border border-indigo-500/30 p-2 rounded text-[10px] text-indigo-200 pointer-events-auto backdrop-blur-md">
       <p className="line-clamp-2 italic">{news.text}</p>
     </div>
   );
@@ -46,7 +53,7 @@ const CrewMessage = ({ message, audio }: { message: string, audio?: string }) =>
   useEffect(() => { if (audio) playCrewAudio(audio); }, [audio]);
   return (
     <div className="absolute bottom-8 left-8 max-w-md pointer-events-none z-10" aria-live="polite">
-      <div className="bg-black/90 border-l-4 border-blue-500 p-5 rounded backdrop-blur-md">
+      <div className="bg-black/90 border-l-4 border-blue-500 p-5 rounded backdrop-blur-md shadow-2xl">
         <p className="text-gray-100 text-sm italic">"{message}"</p>
       </div>
     </div>
@@ -58,10 +65,10 @@ const WarpOverlay = ({ planet, visible }: { planet: Planet, visible: boolean }) 
   return (
     <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center animate-in fade-in duration-1000">
       <div className="relative z-10 flex flex-col items-center gap-8 max-w-3xl text-center px-6">
-        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600 italic">WARP SEQUENCE</h2>
+        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-600 italic tracking-tighter">WARP SEQUENCE</h2>
         
         {planet.videoUrl ? (
-          <div className="w-full aspect-video rounded-2xl border border-blue-500/50 overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.3)]">
+          <div className="w-full aspect-video rounded-2xl border border-blue-500/50 overflow-hidden shadow-[0_0_80px_rgba(37,99,235,0.4)]">
             <video 
               src={planet.videoUrl} 
               autoPlay 
@@ -75,13 +82,13 @@ const WarpOverlay = ({ planet, visible }: { planet: Planet, visible: boolean }) 
           <img src={planet.imageUrl} className="w-full aspect-video rounded-2xl object-cover border border-blue-500/50" alt="Destination" />
         ) : (
           <div className="w-full aspect-video flex items-center justify-center bg-gray-900 rounded-2xl animate-pulse">
-            <span className="text-blue-400 font-mono">CALCULATING TRAJECTORY...</span>
+            <span className="text-blue-400 font-mono text-sm tracking-widest">CALCULATING TRAJECTORY...</span>
           </div>
         )}
 
-        <div className="bg-black/80 p-6 rounded-xl border border-indigo-500/30">
-          <h3 className="text-3xl font-bold" style={{ color: planet.theme.neonColor }}>{planet.name}</h3>
-          <p className="text-gray-400 text-xs mt-2 uppercase tracking-[0.3em]">Distance Syncing: 100%</p>
+        <div className="bg-black/80 p-8 rounded-2xl border border-indigo-500/30 backdrop-blur-xl">
+          <h3 className="text-4xl font-black" style={{ color: planet.theme.neonColor }}>{planet.name.toUpperCase()}</h3>
+          <p className="text-gray-400 text-xs mt-4 uppercase tracking-[0.5em] opacity-50 italic">Distance Syncing: 100%</p>
         </div>
       </div>
     </div>
@@ -92,6 +99,7 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
   const [nextPlanet, setNextPlanet] = useState<Planet | null>(null);
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [liveActive, setLiveActive] = useState(false);
 
   const handleScore = useCallback((points: number) => {
     if (gameState.status !== GameStatus.PLAYING) return;
@@ -135,7 +143,7 @@ export default function App() {
         }));
         setNextPlanet(null);
         setResetTrigger(n => n + 1); 
-    }, 8000); // Longer timeout for video appreciation
+    }, 8000);
   }, [gameState.warpReady, gameState.status, gameState]);
 
   const initKeySelection = async () => {
@@ -146,7 +154,7 @@ export default function App() {
 
   return (
     <div className="w-full h-full relative bg-black select-none overflow-hidden text-white">
-      <div className={`w-full h-full transition-opacity duration-1000 ${gameState.status === GameStatus.PLAYING ? 'opacity-100' : 'opacity-20 blur-sm'}`}>
+      <div className={`w-full h-full transition-all duration-[2s] ${gameState.status === GameStatus.PLAYING ? 'opacity-100 scale-100' : 'opacity-20 blur-xl scale-95'}`}>
         <GameScene 
             planet={gameState.currentPlanet} 
             onScore={handleScore}
@@ -158,12 +166,14 @@ export default function App() {
         />
       </div>
 
+      <LiveTactician active={liveActive && gameState.status === GameStatus.PLAYING} />
+
       {gameState.status === GameStatus.MENU && (
-        <div className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 animate-in fade-in">
-          <h1 className="text-8xl font-black text-blue-500 mb-8 font-display italic tracking-tighter">VOID CADET</h1>
+        <div className="absolute inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-8 animate-in fade-in duration-1000">
+          <h1 className="text-8xl font-black text-blue-500 mb-8 font-display italic tracking-tighter drop-shadow-[0_0_30px_rgba(59,130,246,0.6)]">VOID CADET</h1>
           <button 
             onClick={() => setGameState(p => ({...p, status: GameStatus.KEY_SELECTION}))} 
-            className="px-16 py-5 bg-blue-600 font-black rounded hover:bg-blue-500 transition-all text-xl"
+            className="px-16 py-5 bg-blue-600 font-black rounded-lg hover:bg-blue-500 transition-all text-xl shadow-[0_0_40px_rgba(37,99,235,0.4)] hover:scale-105 active:scale-95"
           >
             INITIATE MISSION
           </button>
@@ -171,13 +181,13 @@ export default function App() {
       )}
 
       {gameState.status === GameStatus.KEY_SELECTION && (
-        <div className="absolute inset-0 z-50 bg-indigo-950/90 flex flex-col items-center justify-center p-8 text-center">
-            <h2 className="text-4xl font-bold mb-4">VE-O ENGINE COMPLIANCE</h2>
-            <p className="max-w-md mb-8 text-indigo-200">Cinematic warp generation requires a paid API key for high-compute video processing. Please select your project.</p>
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-blue-400 underline mb-6 block">Billing Documentation</a>
+        <div className="absolute inset-0 z-50 bg-indigo-950/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-xl">
+            <h2 className="text-4xl font-black mb-4 tracking-tight">ENGINE COMPLIANCE</h2>
+            <p className="max-w-md mb-8 text-indigo-200 leading-relaxed font-mono text-sm opacity-70">Cinematic warp generation requires a paid API key for high-compute video processing. Please link your GCP project to proceed.</p>
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-blue-400 underline mb-8 block text-xs tracking-widest hover:text-white transition-colors">BILLING DOCUMENTATION</a>
             <button 
                 onClick={initKeySelection}
-                className="px-12 py-4 bg-white text-indigo-900 font-bold rounded-full hover:scale-105 transition-transform"
+                className="px-12 py-4 bg-white text-indigo-900 font-black rounded-full hover:scale-110 transition-transform shadow-2xl"
             >
                 SELECT API KEY
             </button>
@@ -185,19 +195,23 @@ export default function App() {
       )}
 
       {gameState.status === GameStatus.GAME_OVER && (
-        <div className="absolute inset-0 z-50 bg-red-950/95 flex flex-col items-center justify-center p-8 text-center" role="alert">
-          <h2 className="text-7xl font-black mb-4 text-red-500 font-display italic">MISSION FAILED</h2>
-          <div className="max-w-xl bg-black/40 p-6 rounded border border-red-500/20 mb-8">
-              <h3 className="text-xs uppercase tracking-widest text-red-400 mb-2">AI Performance Debrief</h3>
-              <p className="text-lg italic text-red-100">{gameState.performanceReview || "Analyzing fatal errors..."}</p>
+        <div className="absolute inset-0 z-50 bg-red-950/95 flex flex-col items-center justify-center p-8 text-center animate-in fade-in" role="alert">
+          <h2 className="text-8xl font-black mb-8 text-red-500 font-display italic tracking-tighter">MISSION FAILED</h2>
+          <div className="max-w-xl bg-black/60 p-8 rounded-2xl border border-red-500/30 mb-12 shadow-2xl backdrop-blur-md">
+              <h3 className="text-[10px] uppercase tracking-[0.5em] text-red-400 mb-4 font-black">AI Performance Debrief</h3>
+              <p className="text-xl italic text-red-100 leading-relaxed">"{gameState.performanceReview || "Analyzing fatal trajectory errors..."}"</p>
           </div>
-          <button onClick={() => location.reload()} className="px-12 py-4 border-2 border-white font-black rounded">REBOOT SYSTEM</button>
+          <button onClick={() => location.reload()} className="px-16 py-5 border-4 border-white font-black rounded-xl hover:bg-white hover:text-black transition-all text-xl uppercase tracking-widest">REBOOT SYSTEM</button>
         </div>
       )}
       
       {gameState.status === GameStatus.PLAYING && (
           <main>
-            <HUD state={gameState} />
+            <HUD 
+              state={gameState} 
+              toggleLive={() => setLiveActive(!liveActive)} 
+              liveActive={liveActive} 
+            />
             <CrewMessage message={gameState.currentPlanet.crewMessage} audio={gameState.currentPlanet.audioBase64} />
           </main>
       )}
