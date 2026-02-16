@@ -1,8 +1,8 @@
 /// <reference lib="dom" />
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Physics, useSphere, usePlane } from '@react-three/cannon';
-import { OrbitControls, Stars, Text, Float, Sparkles, PerspectiveCamera } from '@react-three/drei';
+import { Stars, Text, Float, Sparkles, PerspectiveCamera } from '@react-three/drei';
 import { Planet, GameStatus } from '../types';
 import { Wall, Bumper, WarpGate, Slingshot, Plunger, BossTarget } from './TableObjects';
 import { SimpleFlipper } from './Flippers';
@@ -13,8 +13,10 @@ const Ball = ({ startPos, onLost, theme, isActive }: { startPos: [number, number
     mass: 1,
     position: startPos,
     args: [0.3],
-    material: { friction: 0.05, restitution: 0.6 },
+    // Low friction to roll easily, decent restitution
+    material: { friction: 0.001, restitution: 0.7 },
     allowSleep: false,
+    fixedRotation: false,
   }));
   
   useEffect(() => {
@@ -28,18 +30,21 @@ const Ball = ({ startPos, onLost, theme, isActive }: { startPos: [number, number
           api.position.set(startPos[0], startPos[1], startPos[2]);
           api.velocity.set(0,0,0);
           api.angularVelocity.set(0,0,0);
+          api.wakeUp();
       }
   }, [isActive, startPos, api]);
 
   useFrame(() => {
     if (!ref.current) return;
-    // Ball Lost Logic
-    if (ref.current.position.z > 15) { 
+    
+    // Ball Lost Logic (Past flippers)
+    if (ref.current.position.z > 16) { 
       onLost();
       // Reset temporarily to avoid multi-trigger
       api.position.set(startPos[0], startPos[1], startPos[2]);
       api.velocity.set(0, 0, 0);
     }
+    
     // Glitch prevention: If ball falls through floor
     if (ref.current.position.y < -5) {
         api.position.set(startPos[0], startPos[1], startPos[2]);
@@ -55,14 +60,14 @@ const Ball = ({ startPos, onLost, theme, isActive }: { startPos: [number, number
         metalness={0.9} 
         roughness={0.1} 
         emissive={theme.neonColor} 
-        emissiveIntensity={0.8} 
+        emissiveIntensity={0.5} 
       />
       <Sparkles count={5} scale={1} size={2} speed={0.4} opacity={0.5} color={theme.neonColor} />
     </mesh>
   );
 };
 
-// --- Floor (Glass Table Effect) ---
+// --- Floor ---
 const Floor = ({ color, friction }: { color: string, friction: number }) => {
   const [ref] = usePlane(() => ({
     rotation: [-Math.PI / 2, 0, 0],
@@ -72,16 +77,16 @@ const Floor = ({ color, friction }: { color: string, friction: number }) => {
   return (
     <group>
         <mesh ref={ref as any} receiveShadow>
-            <planeGeometry args={[20, 40]} />
+            <planeGeometry args={[20, 50]} />
             <meshPhysicalMaterial 
                 color={color} 
-                metalness={0.3} 
+                metalness={0.4} 
                 roughness={0.2} 
-                transmission={0.2}
+                transmission={0.1}
                 clearcoat={1}
             />
         </mesh>
-        <gridHelper args={[20, 10, '#ffffff', '#555555']} position={[0, -0.4, 0]} />
+        <gridHelper args={[20, 20, '#ffffff', '#333333']} position={[0, -0.49, 0]} />
     </group>
   );
 };
@@ -94,7 +99,7 @@ interface SceneProps {
   onBallLost: () => void;
   warpReady: boolean;
   gameStatus: GameStatus;
-  resetTrigger: number; // Increment to respawn ball
+  resetTrigger: number;
 }
 
 export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, onBallLost, warpReady, gameStatus, resetTrigger }) => {
@@ -127,7 +132,7 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
 
   return (
     <Canvas shadows dpr={[1, 2]}>
-      <PerspectiveCamera makeDefault position={[0, 18, 14]} fov={35} />
+      <PerspectiveCamera makeDefault position={[0, 22, 16]} fov={35} />
       <color attach="background" args={[planet.theme.floorColor]} />
       <fog attach="fog" args={[planet.theme.floorColor, 10, 60]} />
       
@@ -135,20 +140,18 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
       <ambientLight intensity={planet.theme.ambientIntensity} />
       <pointLight position={[0, 10, 0]} intensity={1} castShadow distance={20} />
       <spotLight 
-        position={[0, 20, 10]} 
-        angle={0.4} 
-        penumbra={1} 
+        position={[0, 30, 10]} 
+        angle={0.3} 
+        penumbra={0.5} 
         intensity={2} 
         color={planet.theme.primaryColor} 
         castShadow 
-        shadow-bias={-0.0001}
       />
       
-      <Stars radius={100} depth={50} count={3000} factor={4} saturation={1} fade speed={0.5} />
+      <Stars radius={100} depth={50} count={2000} factor={4} saturation={1} fade speed={0.5} />
 
       <Physics gravity={gravity} defaultContactMaterial={{ restitution: planet.physics.restitution, friction: planet.physics.friction }}>
         
-        {/* Ball spawns in Plunger Lane at [6.5, 0.5, 12] */}
         <Ball 
             startPos={[6.5, 0.5, 11]} 
             onLost={onBallLost} 
@@ -158,27 +161,23 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
         
         <Floor color={planet.theme.floorColor} friction={planet.physics.friction} />
 
-        {/* --- Table Layout --- */}
-
-        {/* Outer Box */}
-        <Wall args={[1, 4, 30]} position={[-8, 0, 0]} color={planet.theme.primaryColor} /> 
-        <Wall args={[1, 4, 30]} position={[8, 0, 0]} color={planet.theme.primaryColor} />  
+        {/* --- Table Walls --- */}
+        <Wall args={[1, 4, 34]} position={[-8, 0, 2]} color={planet.theme.primaryColor} /> 
+        <Wall args={[1, 4, 34]} position={[8, 0, 2]} color={planet.theme.primaryColor} />  
         <Wall args={[17, 4, 1]} position={[0, 0, -12]} color={planet.theme.primaryColor} />
 
-        {/* Plunger Lane Divider (Right) */}
-        {/* Goes from bottom up to top arch */}
-        <Wall args={[0.5, 2, 22]} position={[5.5, 0, 3]} color={planet.theme.secondaryColor} />
+        {/* Plunger Lane */}
+        <Wall args={[0.5, 2, 24]} position={[5.5, 0, 4]} color={planet.theme.secondaryColor} />
         
-        {/* Top Arch (Curve) */}
+        {/* Top Curve */}
         <Wall args={[6, 2, 1]} position={[-3, 0, -10]} rotation={[0, 0.3, 0]} color={planet.theme.secondaryColor} />
         <Wall args={[6, 2, 1]} position={[2, 0, -10]} rotation={[0, -0.3, 0]} color={planet.theme.secondaryColor} />
 
-        {/* Bumpers Cluster */}
+        {/* Objects */}
         <Bumper position={[0, 0.5, -6]} theme={planet.theme} onHit={() => onScore(100)} />
         <Bumper position={[-2.5, 0.5, -4]} theme={planet.theme} onHit={() => onScore(100)} />
         <Bumper position={[2.5, 0.5, -4]} theme={planet.theme} onHit={() => onScore(100)} />
 
-        {/* Boss Target */}
         <BossTarget 
             position={[0, 2, -2]} 
             name={planet.bossName || "BOSS"} 
@@ -186,15 +185,12 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
             onHit={() => onScore(500)}
         />
 
-        {/* Slingshots (Near Flippers) */}
-        {/* Left Slingshot */}
         <Slingshot 
             position={[-4.5, 0.5, 7]} 
             rotation={[0, 0.4, 0]} 
             theme={planet.theme} 
             onHit={() => onScore(50)} 
         />
-        {/* Right Slingshot */}
         <Slingshot 
             position={[3.5, 0.5, 7]} 
             rotation={[0, -0.4, 0]} 
@@ -202,27 +198,19 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
             onHit={() => onScore(50)} 
         />
 
-        {/* In-lanes (Guides to flippers) */}
-        {/* Left In-lane */}
-        <Wall args={[0.2, 1, 5]} position={[-6, 0, 9]} rotation={[0, 0.15, 0]} color={planet.theme.secondaryColor} />
-        {/* Right In-lane */}
-        <Wall args={[0.2, 1, 5]} position={[2, 0, 9]} rotation={[0, -0.15, 0]} color={planet.theme.secondaryColor} />
-
         {/* Flippers */}
         <SimpleFlipper side="left" position={[-2.5, 0.5, 11]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.left} />
         <SimpleFlipper side="right" position={[2.5, 0.5, 11]} rotation={[0, 0, 0]} color={planet.theme.neonColor} isPressed={keys.right} />
 
-        {/* Plunger Mechanism */}
+        {/* Plunger */}
         <Plunger position={[6.5, 0.5, 13]} color={planet.theme.secondaryColor} isPressed={keys.space} />
 
-        {/* Warp Gate (Top Center) */}
         <WarpGate 
             position={[0, 0.5, -11]} 
             isOpen={warpReady} 
             onEnter={onWarpEnter} 
             theme={planet.theme} 
         />
-
       </Physics>
       
       {/* 3D Title */}
@@ -238,9 +226,6 @@ export const GameScene: React.FC<SceneProps> = ({ planet, onScore, onWarpEnter, 
            {planet.name.toUpperCase()}
          </Text>
       </Float>
-      
-      {/* Debug Controls (Optional) */}
-      {/* <OrbitControls /> */}
     </Canvas>
   );
 };

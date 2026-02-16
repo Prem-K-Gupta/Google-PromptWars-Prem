@@ -39,13 +39,12 @@ export const Wall: React.FC<WallProps> = ({ args, position, rotation = [0, 0, 0]
 
 export const Bumper: React.FC<{ position: [number, number, number]; theme: VisualTheme; onHit: () => void }> = ({ position, theme, onHit }) => {
   const [isHit, setIsHit] = useState(false);
-  const [ref, api] = useCylinder(() => ({
+  const [ref] = useCylinder(() => ({
     type: 'Static',
     position,
     args: [0.5, 0.5, 1, 16],
-    material: { restitution: 1.2 }, // Bouncy!
-    onCollide: (e) => {
-      // prevent rapid double trigger
+    material: { restitution: 1.5 }, // Extra bouncy
+    onCollide: () => {
       if (!isHit) {
         onHit();
         setIsHit(true);
@@ -62,7 +61,6 @@ export const Bumper: React.FC<{ position: [number, number, number]; theme: Visua
         emissive={isHit ? "#ffffff" : theme.neonColor} 
         emissiveIntensity={isHit ? 3 : 1}
       />
-      {/* Glow Ring */}
       <mesh position={[0, -0.4, 0]}>
          <torusGeometry args={[0.6, 0.05, 16, 32]} />
          <meshBasicMaterial color={theme.neonColor} />
@@ -79,7 +77,7 @@ export const Slingshot: React.FC<{ position: [number, number, number]; rotation:
     position,
     rotation,
     args: [0.3, 1, 3.5], 
-    material: { restitution: 1.8, friction: 0 }, // Very bouncy
+    material: { restitution: 2.0, friction: 0 }, // Very bouncy
     onCollide: (e) => {
         if(e.body.name === 'ball' && !isHit) {
             onHit();
@@ -109,26 +107,43 @@ export const Plunger: React.FC<{ position: [number, number, number]; color: stri
         type: 'Kinematic',
         position,
         args: [0.8, 1, 1],
-        material: { friction: 0, restitution: 0 }
+        material: { friction: 0, restitution: 0.8 }
     }));
+    
+    // Track current Z position for manual animation
+    const currentZ = useRef(position[2]);
 
-    useFrame(() => {
-        // Rest position Z: position[2]
-        // Pulled position Z: position[2] + 2
-        // We act as a spring. 
-        if (isPressed) {
-            // Pull back slowly
-            api.position.set(position[0], position[1], position[2] + 2);
-        } else {
-            // Snap back forward (launch)
-            api.position.set(position[0], position[1], position[2]);
+    useFrame((state, delta) => {
+        const startZ = position[2];
+        const pullBackZ = startZ + 3; // Pull back distance
+        
+        const targetZ = isPressed ? pullBackZ : startZ;
+        
+        // Speed: Slow pull back, fast release
+        const speed = isPressed ? 5 : 60; 
+        
+        const diff = targetZ - currentZ.current;
+        
+        // Don't overshoot
+        const move = Math.sign(diff) * Math.min(Math.abs(diff), speed * delta);
+        
+        currentZ.current += move;
+        
+        // Update Position
+        api.position.set(position[0], position[1], currentZ.current);
+        
+        // CRITICAL: Update Velocity. 
+        // Physics engine needs velocity to transfer momentum to the ball.
+        // Velocity = distance / time
+        if (delta > 0) {
+            api.velocity.set(0, 0, move / delta);
         }
     });
 
     return (
         <mesh ref={ref as any}>
             <boxGeometry args={[0.8, 1, 1]} />
-            <meshStandardMaterial color={isPressed ? "red" : color} />
+            <meshStandardMaterial color={isPressed ? "#ef4444" : color} />
         </mesh>
     );
 };
@@ -137,10 +152,9 @@ export const BossTarget: React.FC<{ position: [number, number, number]; name: st
     const [isHit, setIsHit] = useState(false);
     
     const [ref, api] = useBox(() => ({
-        type: 'Static', // Static for stability, or Kinematic for moving
+        type: 'Static',
         position,
-        args: [2, 2, 2],
-        isTrigger: true, // Pass through, but triggers event? Or bouncing? Let's make it bounce
+        args: [1.5, 1.5, 1.5],
         onCollide: () => {
              onHit();
              setIsHit(true);
@@ -150,29 +164,23 @@ export const BossTarget: React.FC<{ position: [number, number, number]; name: st
 
     useFrame((state) => {
         const t = state.clock.getElapsedTime();
-        // Float animation
-        api.position.set(position[0], position[1] + Math.sin(t) * 0.5, position[2]);
-        api.rotation.set(t * 0.5, t * 0.3, 0);
+        api.position.set(position[0], position[1] + Math.sin(t * 2) * 0.3, position[2]);
+        api.rotation.set(t, t * 0.5, 0);
     });
 
     return (
         <group ref={ref as any}>
             <mesh>
-                <dodecahedronGeometry args={[1, 0]} />
+                <octahedronGeometry args={[1, 0]} />
                 <meshStandardMaterial 
                     color={isHit ? "white" : theme.secondaryColor} 
                     wireframe 
                     emissive={theme.neonColor}
-                    emissiveIntensity={isHit ? 5 : 1}
+                    emissiveIntensity={isHit ? 5 : 2}
                 />
             </mesh>
-            <mesh scale={[0.5, 0.5, 0.5]}>
-                 <dodecahedronGeometry args={[1, 0]} />
-                 <meshBasicMaterial color={theme.neonColor} />
-            </mesh>
-            {/* Boss Name Tag */}
-            <Float position={[0, 2, 0]} speed={2}>
-                <Text fontSize={0.5} color={theme.neonColor}>
+            <Float position={[0, 1.5, 0]} speed={2}>
+                <Text fontSize={0.4} color={theme.neonColor} font="https://fonts.gstatic.com/s/audiowide/v16/l7gdbjpo0cum0ckerdt6.woff">
                     {name}
                 </Text>
             </Float>
@@ -199,11 +207,6 @@ export const WarpGate: React.FC<{
 
   return (
     <group ref={ref as any}>
-      <mesh visible={false}> 
-        <boxGeometry args={[3, 2, 0.5]} />
-      </mesh>
-
-      {/* The Gate Structure */}
       <mesh position={[-1.6, 0, 0]}>
         <boxGeometry args={[0.2, 2, 0.5]} />
         <meshStandardMaterial color={theme.primaryColor} />
@@ -217,15 +220,11 @@ export const WarpGate: React.FC<{
         <meshStandardMaterial color={theme.primaryColor} />
       </mesh>
 
-      {/* Portal Visuals */}
       {isOpen ? (
-        <group>
-             <mesh position={[0, 0, 0]}>
-                <planeGeometry args={[3, 2]} />
-                <meshBasicMaterial color="#fff" side={2} transparent opacity={0.6} />
-            </mesh>
-            <Sparkles count={50} scale={3} size={5} speed={2} color="#00ff00" />
-        </group>
+        <mesh position={[0, 0, 0]}>
+           <planeGeometry args={[3, 2]} />
+           <meshBasicMaterial color="#fff" side={2} transparent opacity={0.6} />
+        </mesh>
       ) : (
         <mesh position={[0, 0, 0]}>
           <planeGeometry args={[3, 2]} />
@@ -236,12 +235,3 @@ export const WarpGate: React.FC<{
     </group>
   );
 };
-const Sparkles = ({ count, scale, size, speed, color }: any) => {
-    // Basic shim if drei sparkles aren't imported or behaving in this context, 
-    // but we use imports from Scene.tsx usually. 
-    // Assuming this component is used inside Scene which imports drei.
-    // However, TableObjects is standalone. Let's rely on standard meshes or imports if passed.
-    // To be safe, I'll remove Sparkles usage here or import it.
-    // I will import Sparkles from drei at the top.
-    return null; 
-}
