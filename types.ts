@@ -1,8 +1,9 @@
+
 export interface PhysicsModifiers {
-  gravity: number; // Vertical gravity (y-axis relative to table slope)
+  gravity: number;
   friction: number;
-  restitution: number; // Bounciness
-  slope: number; // Z-axis gravity component
+  restitution: number;
+  slope: number;
 }
 
 export interface VisualTheme {
@@ -16,7 +17,7 @@ export interface VisualTheme {
 export interface Upgrade {
   name: string;
   description: string;
-  icon: string; // Emoji representation
+  icon: string;
   effectType: 'score_multiplier' | 'extra_life' | 'warp_charge_boost';
 }
 
@@ -29,6 +30,9 @@ export interface Planet {
   crewMessage: string;
   bossName?: string;
   artifact?: Upgrade;
+  imageUrl?: string;
+  audioBase64?: string;
+  sources?: string[];
 }
 
 export enum GameStatus {
@@ -45,7 +49,7 @@ export interface GameState {
   currentPlanet: Planet;
   warpReady: boolean;
   lives: number;
-  warpCharge: number; // 0 to 100
+  warpCharge: number;
   artifacts: Upgrade[];
   scoreMultiplier: number;
 }

@@ -8,30 +8,24 @@
     <style>
       body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: white; }
       #root { width: 100%; height: 100%; }
-      /* Custom font for sci-fi feel */
       @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Share+Tech+Mono&display=swap');
       .font-mono { font-family: 'Share Tech Mono', monospace; }
       .font-display { font-family: 'Audiowide', cursive; }
       
-      .typing-effect {
-        overflow: hidden;
-        border-right: .15em solid orange;
-        white-space: nowrap;
-        margin: 0 auto;
-        letter-spacing: .15em;
-        animation: 
-          typing 3.5s steps(40, end),
-          blink-caret .75s step-end infinite;
+      .audio-bars {
+        display: flex;
+        gap: 2px;
+        align-items: flex-end;
+        height: 12px;
       }
-
-      @keyframes typing {
-        from { width: 0 }
-        to { width: 100% }
+      .audio-bar {
+        width: 3px;
+        background: #60a5fa;
+        animation: audio-bounce 0.5s ease-in-out infinite alternate;
       }
-
-      @keyframes blink-caret {
-        from, to { border-color: transparent }
-        50% { border-color: orange; }
+      @keyframes audio-bounce {
+        from { height: 2px; }
+        to { height: 100%; }
       }
     </style>
   <script type="importmap">
