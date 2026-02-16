@@ -25,6 +25,9 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
     You are the Game Master for "VOID CADET".
     Generate the next planet in this infinite procedural pinball journey.
     
+    CRITICAL: Use Google Search to find real, recently discovered exoplanets or interesting astronomical objects (e.g. from 2024/2025 news). 
+    Base the "name" and "description" on these real-world findings if possible.
+    
     ${context}
     
     Physics:
@@ -41,6 +44,7 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
     Current Score: ${currentGameState.score}.
     Lives: ${currentGameState.lives}.
     
+    Search for a real-world exoplanet discovered recently and use it as inspiration.
     Generate next planet JSON.
   `;
 
@@ -94,20 +98,59 @@ export const generateNextPlanet = async (currentGameState: GameState): Promise<P
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: planetSchema,
+        tools: [{ googleSearch: {} }] // Added Google Search Tool
       },
     });
 
     const jsonText = response.text || "{}";
     const data = JSON.parse(jsonText);
     
+    // Check for grounding metadata to potentially enrich the description with real sources
+    const groundingSources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    let enrichedDescription = data.description;
+    if (groundingSources.length > 0) {
+        const firstSource = groundingSources[0];
+        if (firstSource.web?.uri) {
+            enrichedDescription += ` [Reference: ${firstSource.web.title || 'Source'}]`;
+        }
+    }
+    
     return {
       id: crypto.randomUUID(),
-      ...data
+      ...data,
+      description: enrichedDescription
     };
 
   } catch (error) {
     console.error("Gemini generation failed, using fallback", error);
     return generateFallbackPlanet();
+  }
+};
+
+export const fetchGalacticNews = async () => {
+  const apiKey = getApiKey();
+  if (!apiKey) return null;
+
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: 'Provide one short headline and a very brief summary (10 words max) of a real astronomy or space exploration discovery from 2024 or 2025. Be concise.',
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    });
+
+    const text = response.text || "";
+    const source = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.[0]?.web;
+
+    return {
+      text,
+      url: source?.uri || null,
+      title: source?.title || 'External Intelligence'
+    };
+  } catch (e) {
+    return null;
   }
 };
 
